@@ -31,7 +31,7 @@ static const char *TAG = "example";
 #define PORT CONFIG_EXAMPLE_PORT
 
 
-Bracelet bracelet;
+//Bracelet bracelet;
 
 int GlobalVar = 0;
 Topic *topicHead;
