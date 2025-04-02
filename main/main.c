@@ -31,7 +31,7 @@ static const char *TAG = "example";
 #define PORT CONFIG_EXAMPLE_PORT
 
 
-//Bracelet bracelet;
+
 
 int GlobalVar = 0;
 Topic *topicHead;
@@ -182,7 +182,8 @@ void app_main(void)
     ESP_ERROR_CHECK(example_connect());
 
     topicHead = createTopic("GlobalVar", getterGlobalVar, setterGlobalVar);
-    addTopic(topicHead, createTopic("g_var", getterGlobalVar, setterGlobalVar));
+    addTopic(topicHead, createTopic("intensity", getIntensity, setIntensity));
+    addTopic(topicHead, createTopic("motors", getMotors, setMotors));
 
     initializeHaptic(&bracelet); 
 #ifdef CONFIG_EXAMPLE_IPV4

@@ -27,8 +27,13 @@ uint32_t dutyCycleFromIntensity(Bracelet brclt, int intensity)
 
 int intensityFromDutyCycle(Bracelet brclt, uint32_t dutyCycle)
 {
+    ESP_LOGI(TAGb, "intensityFromDuty:%d \n", brclt.motor_count);
+    if(dutyCycle ==0) ESP_LOGI(TAGb, "intensityFromDuty:0 \n");
     return (int)(0 == dutyCycle ? 0 : dutyCycle * 100 / bracelet.max_duty);
 }
+void getMotors (int sockfd, char *parameters){}
+
+void setMotors (int sockfd, char *parameters){}
 
 void setIntensity(int sockfd, char *parameters)
 {
@@ -38,38 +43,45 @@ void setIntensity(int sockfd, char *parameters)
 
     params = (char **)malloc(1 * sizeof(int *));
     char *token = strtok(parameters, ",");
-
+    
     while (token != NULL)
-    {
+    {    
+        ESP_LOGI(TAGb, "setIntensity:%s", token);
         params[idx] = (char *)malloc(sizeof(char) * strlen(token));
         strcpy(params[idx++], token);
+        token = strtok(NULL, ",");
     }
     // set intensity for each motor
     if (idx != bracelet.motor_count)
-        write(sockfd, "error\n", 6);
+        write(sockfd, "Error: parameters do not match motor count\n", 6);
     else
     {
         for (int i = 0; i < idx; i++)
         {
+            ESP_LOGI(TAGb, "setIntensity for motor:%d", i);
             bracelet.motor[i]->duty = dutyCycleFromIntensity(bracelet, atoi(params[i]));
             ESP_ERROR_CHECK(ledc_set_duty(LEDC_MODE, bracelet.motor[i]->channel, bracelet.motor[i]->duty));
             ESP_ERROR_CHECK(ledc_update_duty(LEDC_MODE, bracelet.motor[i]->channel));
         }
         write(sockfd, "done\n", 6);
     }
+    free(params);
 }
 
 void getIntensity(int sockfd, char *parameters)
 {
-    char datum[5];
+    char datum[10];
     int i;
+    ESP_LOGI(TAGb, "getIntensity");
     // params is a list of comma separated integers
     for (i = 0; i < bracelet.motor_count - 1; i++)
     {
         sprintf(datum, "%d,", (intensityFromDutyCycle(bracelet, bracelet.motor[i]->duty)));
+        ESP_LOGI(TAGb, "getIntensity: datum %s", datum);
         write(sockfd, datum, strlen(datum));
     }
-    sprintf(datum, "%d\n", (intensityFromDutyCycle(bracelet, bracelet.motor[++i]->duty)));
+    sprintf(datum, "%d\n", (intensityFromDutyCycle(bracelet, bracelet.motor[i]->duty)));
+    ESP_LOGI(TAGb, "getIntensity: datum %s", datum);
     write(sockfd, datum, strlen(datum));
 }
 
@@ -124,25 +136,11 @@ void initializeHaptic(Bracelet *brclt)
     ESP_ERROR_CHECK(ledc_timer_config(&(brclt->timer)));
 
     ESP_LOGI(TAGb, "InitializeHaptic..motor0");
-    /*    bracelet->motor0.speed_mode = LEDC_MODE;
-       bracelet->motor0.channel = LEDC_CHANNEL_0;
-       bracelet->motor0.timer_sel = LEDC_TIMER;
-       bracelet->motor0.intr_type = LEDC_INTR_DISABLE;
-       bracelet->motor0.gpio_num = 0;
-       bracelet->motor0.duty = 0;
-       bracelet->motor0.hpoint = 0;
-       ESP_ERROR_CHECK(ledc_channel_config(&bracelet->motor0)); */
+    
     addMotor(brclt, LEDC_CHANNEL_0, 0);
 
     ESP_LOGI(TAGb, "InitializeHaptic..motor1");
-    /*     bracelet->motor1.speed_mode = LEDC_MODE;
-        bracelet->motor1.channel = LEDC_CHANNEL_1;
-        bracelet->motor1.timer_sel = LEDC_TIMER;
-        bracelet->motor1.intr_type = LEDC_INTR_DISABLE;
-        bracelet->motor1.gpio_num = 2; // LEDC_OUTPUT_IO,
-        bracelet->motor1.duty = 0;     // Start with 0% duty cycle
-        bracelet->motor1.hpoint = 0;
-        ESP_ERROR_CHECK(ledc_channel_config(&bracelet->motor1)); */
+    
     addMotor(brclt, LEDC_CHANNEL_1, 2);
 
     // Set duty cycle (example: 50%)
@@ -151,7 +149,7 @@ void initializeHaptic(Bracelet *brclt)
 
     // Example to ramp up the duty cycle over time
 
-    ESP_LOGI(TAGb, "InitializeHaptic.motor count%d", brclt->motor_count);
+    ESP_LOGI(TAGb, "InitializeHaptic.motor count %d", brclt->motor_count);
     
     for (int current = 0; current < brclt->motor_count; current++)
     {
