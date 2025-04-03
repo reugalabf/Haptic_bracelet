@@ -183,7 +183,7 @@ void app_main(void)
 
     topicHead = createTopic("GlobalVar", getterGlobalVar, setterGlobalVar);
     addTopic(topicHead, createTopic("intensity", getIntensity, setIntensity));
-    addTopic(topicHead, createTopic("motors", getMotors, setMotors));
+    addTopic(topicHead, createTopic("motor_count", getMotorCount, setMotorCount));
 
     initializeHaptic(&bracelet); 
 #ifdef CONFIG_EXAMPLE_IPV4

@@ -27,13 +27,19 @@ uint32_t dutyCycleFromIntensity(Bracelet brclt, int intensity)
 
 int intensityFromDutyCycle(Bracelet brclt, uint32_t dutyCycle)
 {
-    ESP_LOGI(TAGb, "intensityFromDuty:%d \n", brclt.motor_count);
-    if(dutyCycle ==0) ESP_LOGI(TAGb, "intensityFromDuty:0 \n");
     return (int)(0 == dutyCycle ? 0 : dutyCycle * 100 / bracelet.max_duty);
 }
-void getMotors (int sockfd, char *parameters){}
+void getMotorCount(int sockfd, char *parameters)
+{
+    char response[10];
+    sprintf(response, "%d\n", bracelet.motor_count);
+    write(sockfd, response, strlen(response));
+}
 
-void setMotors (int sockfd, char *parameters){}
+void setMotorCount(int sockfd, char *parameters)
+{
+    write(sockfd, "done\n", 6);
+}
 
 void setIntensity(int sockfd, char *parameters)
 {
@@ -43,10 +49,10 @@ void setIntensity(int sockfd, char *parameters)
 
     params = (char **)malloc(1 * sizeof(int *));
     char *token = strtok(parameters, ",");
-    
+
     while (token != NULL)
-    {    
-        ESP_LOGI(TAGb, "setIntensity:%s", token);
+    {
+
         params[idx] = (char *)malloc(sizeof(char) * strlen(token));
         strcpy(params[idx++], token);
         token = strtok(NULL, ",");
@@ -58,7 +64,6 @@ void setIntensity(int sockfd, char *parameters)
     {
         for (int i = 0; i < idx; i++)
         {
-            ESP_LOGI(TAGb, "setIntensity for motor:%d", i);
             bracelet.motor[i]->duty = dutyCycleFromIntensity(bracelet, atoi(params[i]));
             ESP_ERROR_CHECK(ledc_set_duty(LEDC_MODE, bracelet.motor[i]->channel, bracelet.motor[i]->duty));
             ESP_ERROR_CHECK(ledc_update_duty(LEDC_MODE, bracelet.motor[i]->channel));
@@ -72,26 +77,26 @@ void getIntensity(int sockfd, char *parameters)
 {
     char datum[10];
     int i;
-    ESP_LOGI(TAGb, "getIntensity");
+
     // params is a list of comma separated integers
     for (i = 0; i < bracelet.motor_count - 1; i++)
     {
         sprintf(datum, "%d,", (intensityFromDutyCycle(bracelet, bracelet.motor[i]->duty)));
-        ESP_LOGI(TAGb, "getIntensity: datum %s", datum);
+
         write(sockfd, datum, strlen(datum));
     }
     sprintf(datum, "%d\n", (intensityFromDutyCycle(bracelet, bracelet.motor[i]->duty)));
-    ESP_LOGI(TAGb, "getIntensity: datum %s", datum);
+
     write(sockfd, datum, strlen(datum));
 }
 
 void addMotor(Bracelet *brclt, ledc_channel_t channel, int gpio_num)
 {
-    ESP_LOGI(TAGb, "addMotor");
+
     ledc_channel_config_t *channel_config = malloc(sizeof(ledc_channel_config_t));
     if (channel_config != NULL)
     {
-        ESP_LOGI(TAGb, "addMotor:channel_config (1)");
+
         channel_config->speed_mode = LEDC_MODE;
         channel_config->sleep_mode = LEDC_SLEEP_MODE_KEEP_ALIVE;
         channel_config->channel = channel;
@@ -100,7 +105,7 @@ void addMotor(Bracelet *brclt, ledc_channel_t channel, int gpio_num)
         channel_config->gpio_num = gpio_num;
         channel_config->duty = 0;
         channel_config->hpoint = 0;
-        ESP_LOGI(TAGb, "addMotor:channel_config (3)%d", brclt->motor_count);
+
         if (brclt->motor_count == 0)
             brclt->motor = malloc(sizeof(ledc_channel_config_t));
         else
@@ -126,7 +131,6 @@ void initializeHaptic(Bracelet *brclt)
 
     ESP_LOGI(TAGb, "InitializeHaptic");
     brclt->motor_count = 0;
-    ESP_LOGI(TAGb, "InitializeHaptic..timer");
 
     brclt->timer.speed_mode = LEDC_MODE;
     brclt->timer.timer_num = LEDC_TIMER;
@@ -135,22 +139,12 @@ void initializeHaptic(Bracelet *brclt)
     brclt->timer.clk_cfg = LEDC_AUTO_CLK;
     ESP_ERROR_CHECK(ledc_timer_config(&(brclt->timer)));
 
-    ESP_LOGI(TAGb, "InitializeHaptic..motor0");
-    
     addMotor(brclt, LEDC_CHANNEL_0, 0);
 
-    ESP_LOGI(TAGb, "InitializeHaptic..motor1");
-    
     addMotor(brclt, LEDC_CHANNEL_1, 2);
 
-    // Set duty cycle (example: 50%)
-    ESP_LOGI(TAGb, "InitializeHaptic.max_duty");
     brclt->max_duty = (1 << LEDC_DUTY_RES) - 1;
 
-    // Example to ramp up the duty cycle over time
-
-    ESP_LOGI(TAGb, "InitializeHaptic.motor count %d", brclt->motor_count);
-    
     for (int current = 0; current < brclt->motor_count; current++)
     {
         for (int i = 0; i < brclt->max_duty; i += 10)
