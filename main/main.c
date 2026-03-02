@@ -69,7 +69,7 @@ static void do_processQuery(const int sock)
         else
         {
             rx_buffer[len] = 0; // Null-terminate whatever is received and treat it like a string
-            ESP_LOGI(TAG, "Received %d bytes: %s", len, rx_buffer);
+            //ESP_LOGI(TAG, "Received %d bytes: %s", len, rx_buffer);
 
             processMessage(sock, rx_buffer, topicHead);
         }
@@ -190,6 +190,7 @@ void app_main(void)
     initializeHaptic(&bracelet); 
 #ifdef CONFIG_EXAMPLE_IPV4
     xTaskCreate(tcp_server_task, "tcp_server", 4096, (void *)AF_INET, 5, NULL);
+
 #endif
 #ifdef CONFIG_EXAMPLE_IPV6
     xTaskCreate(tcp_server_task, "tcp_server", 4096, (void *)AF_INET6, 5, NULL);

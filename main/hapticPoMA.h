@@ -39,7 +39,7 @@ static void do_processQuery(const int sock)
         else
         {
             rx_buffer[len] = 0; // Null-terminate whatever is received and treat it like a string
-            ESP_LOGI(TAG, "Received %d bytes: %s", len, rx_buffer);
+            //ESP_LOGI(TAG, "Received %d bytes: %s", len, rx_buffer);
 
             processMessage(sock, rx_buffer, topicHead);
         }

@@ -19,7 +19,7 @@ static const char *TAGb = "bracelet";
 
 typedef struct VibrationMotor
 {
-    ledc_channel_config_t *channel_t;
+    ledc_channel_config_t channel_t;
     unsigned char enabled;
     // unsigned char map_index; // gpio_num * 1 (!)
 } VibrationMotor;
@@ -39,19 +39,23 @@ uint32_t dutyCycleFromIntensity(Bracelet brclt, int intensity)
     return 0 == intensity ? 0 : bracelet.max_duty * intensity / 100;
 }
 
-void motorIntensity(VibrationMotor motor, int intensity)
+void motorIntensity(VibrationMotor *motor, int intensity)
 {
 
-    motor.channel_t->duty = dutyCycleFromIntensity(bracelet, intensity);
-    ESP_ERROR_CHECK(ledc_set_duty(LEDC_MODE, motor.channel_t->channel, dutyCycleFromIntensity(bracelet, (intensity))));
-    ESP_ERROR_CHECK(ledc_update_duty(LEDC_MODE, motor.channel_t->channel));
+    motor->channel_t.duty = dutyCycleFromIntensity(bracelet, intensity);
+    ESP_ERROR_CHECK(ledc_set_duty(LEDC_MODE, motor->channel_t.channel, dutyCycleFromIntensity(bracelet, (intensity))));
+    ESP_ERROR_CHECK(ledc_update_duty(LEDC_MODE, motor->channel_t.channel));
 }
 
 int enabled_motor_count(Bracelet bracelet)
 {
+
     int count = 0;
+
     for (int idx = 0; idx < bracelet.motor_count; idx++)
         count += bracelet.motor[idx].enabled; // enabled == 1, disabled == 0
+    
+    //ESP_LOGI(TAG, "Enabled motor count");
     return count;
 }
 
@@ -110,31 +114,39 @@ void setIntensity(int sockfd, char *parameters)
     char **params;
     int idx = 0;
     int enabled_indexes[MOTOR_COUNT];
+    int intensity;
 
-    params = (char **)malloc(1 * sizeof(int *));
-    char *token = strtok(parameters, ",");
-
-    while (token != NULL)
-    {
-        params[idx] = (char *)malloc(sizeof(char) * strlen(token));
-        strcpy(params[idx++], token);
-        ESP_LOGI(TAG, "token:%s", token);
-        token = strtok(NULL, ",");
-    }
-    // set intensity for each motor
-    if (idx != enabled_motor_count(bracelet) || check_params(params, idx) == 0)
-        write(sockfd, PARAMS_ERROR, strlen(PARAMS_ERROR));
+    params = (char **)malloc(MOTOR_COUNT * sizeof(int *));
+    if (params == NULL)
+        ESP_LOGE(TAG, "SetIntensity allocation fails");
     else
     {
-        enabled_motor_indexes(bracelet, enabled_indexes);
-        for (int i = 0; i < idx; i++)
+        char *token = strtok(parameters, ",");
+
+        while (token != NULL)
         {
-            // ESP_LOGI(TAG, "enabled_index: %d intensity:%s",enabled_indexes[i], params[i]);
-            motorIntensity(bracelet.motor[enabled_indexes[i]], atoi(params[i]));
+            params[idx] = (char *)malloc(sizeof(char) * strlen(token));
+            strcpy(params[idx++], token);
+            //ESP_LOGI(TAG, "token:%s", token);
+            token = strtok(NULL, ",");
         }
-        write(sockfd, DONE_MSG, strlen(DONE_MSG));
+        // set intensity for each motor
+        if (idx != enabled_motor_count(bracelet) || check_params(params, idx) == 0)
+            write(sockfd, PARAMS_ERROR, strlen(PARAMS_ERROR));
+        else
+        {
+            enabled_motor_indexes(bracelet, enabled_indexes);
+            for (int i = 0; i < idx; i++)
+            {
+                intensity = atoi(params[i]);
+                motorIntensity(&(bracelet.motor[enabled_indexes[i]]), intensity);
+                //ESP_LOGI(TAG, "enabled_index: %d intensity:%d", enabled_indexes[i], intensity);
+                free(params[i]);
+            }
+            write(sockfd, DONE_MSG, strlen(DONE_MSG));
+        }
+        free(params);
     }
-    free(params);
 }
 
 void getIntensity(int sockfd, char *parameters)
@@ -145,37 +157,30 @@ void getIntensity(int sockfd, char *parameters)
     // params is a list of comma separated integers
     for (i = 0; i < enabled_motor_count(bracelet) - 1; i++)
     {
-        sprintf(datum, "%d,", (intensityFromDutyCycle(bracelet, bracelet.motor[i].channel_t->duty)));
+        sprintf(datum, "%d,", (intensityFromDutyCycle(bracelet, bracelet.motor[i].channel_t.duty)));
 
         write(sockfd, datum, strlen(datum));
     }
-    sprintf(datum, "%d\n", (intensityFromDutyCycle(bracelet, bracelet.motor[i].channel_t->duty)));
+    sprintf(datum, "%d\n", (intensityFromDutyCycle(bracelet, bracelet.motor[i].channel_t.duty)));
 
     write(sockfd, datum, strlen(datum));
 }
 
 void addMotor(Bracelet *brclt, int motor_index, ledc_channel_t channel, int gpio_num)
 {
-    ledc_channel_config_t *channel_config = malloc(sizeof(ledc_channel_config_t));
 
-    if (channel_config != NULL)
-    {
-        channel_config->speed_mode = LEDC_MODE;
-        channel_config->sleep_mode = LEDC_SLEEP_MODE_KEEP_ALIVE;
-        channel_config->channel = channel;
-        channel_config->timer_sel = LEDC_TIMER;
-        channel_config->intr_type = LEDC_INTR_DISABLE;
-        channel_config->gpio_num = gpio_num;
-        channel_config->duty = 0;
-        channel_config->hpoint = 0;
+    brclt->motor[motor_index].channel_t.speed_mode = LEDC_MODE;
+    brclt->motor[motor_index].channel_t.sleep_mode = LEDC_SLEEP_MODE_KEEP_ALIVE;
+    brclt->motor[motor_index].channel_t.channel = channel;
+    brclt->motor[motor_index].channel_t.timer_sel = LEDC_TIMER;
+    brclt->motor[motor_index].channel_t.intr_type = LEDC_INTR_DISABLE;
+    brclt->motor[motor_index].channel_t.gpio_num = gpio_num;
+    brclt->motor[motor_index].channel_t.duty = 0;
+    brclt->motor[motor_index].channel_t.hpoint = 0;
 
-        ESP_ERROR_CHECK(ledc_channel_config(channel_config));
+    ESP_ERROR_CHECK(ledc_channel_config(&(brclt->motor[motor_index].channel_t)));
 
-        brclt->motor[motor_index].enabled = 1; // enabled
-        brclt->motor[motor_index].channel_t = channel_config;
-    }
-    else
-        ESP_LOGI(TAGb, "Malloc error: new motor");
+    brclt->motor[motor_index].enabled = 1; // enabled
 }
 
 void removeMotor(Bracelet *brclt, int gpio_num)
@@ -190,7 +195,7 @@ void setMotorConfig(int sockfd, char *parameters)
     char **params;
     int idx = 0;
 
-    params = (char **)malloc(1 * sizeof(int *));
+    params = (char **)malloc(MOTOR_COUNT * sizeof(int *));
     char *token = strtok(parameters, ",");
 
     while (token != NULL)
@@ -208,6 +213,8 @@ void setMotorConfig(int sockfd, char *parameters)
     {
         bracelet.motor[atoi(params[0])].enabled = atoi(params[1]);
         write(sockfd, DONE_MSG, strlen(DONE_MSG));
+        free(params[0]);
+        free(params[1]);
     }
     free(params);
 }
@@ -242,10 +249,16 @@ void setEnabledMotors(int sockfd, char *parameters)
     char **params;
     int idx = 0;
 
-    for (int current = 0; current < bracelet.motor_count; current++)
-        motorIntensity(bracelet.motor[current], 0);
+    for (int current = 0; current < bracelet.motor_count; current++){
+        motorIntensity(&(bracelet.motor[current]), 0);
+        //ESP_LOGI(TAG, "set enabled motors. turnoff motor[%d]", current);
+    }
 
-    params = (char **)malloc(1 * sizeof(int *));
+    params = (char **)malloc(MOTOR_COUNT * sizeof(int *));
+    
+    if(params ==NULL)
+        ESP_LOGE(TAG, "set enabled motors. unable to allocate memory");
+    else{
     char *token = strtok(parameters, ",");
 
     while (token != NULL)
@@ -254,19 +267,23 @@ void setEnabledMotors(int sockfd, char *parameters)
         strcpy(params[idx++], token);
         token = strtok(NULL, ",");
     }
-    
+
     if (idx != bracelet.motor_count)
         write(sockfd, PARAMS_ERROR, strlen(PARAMS_ERROR));
     else
     {
         for (int i = 0; i < idx; i++)
         {
-
+            
             bracelet.motor[i].enabled = atoi(params[i]);
+            //ESP_LOGI(TAG, "set enabled motors[%d] %d", i, bracelet.motor[i].enabled);
+
+            free(params[i]);
         }
         write(sockfd, DONE_MSG, strlen(DONE_MSG));
     }
     free(params);
+}
 }
 
 /*end PoMA Handleres*/
@@ -300,19 +317,15 @@ void initializeHaptic(Bracelet *brclt)
 
     brclt->max_duty = (1 << LEDC_DUTY_RES) - 1;
 
-    for (int current = 0; current < brclt->motor_count; current++)
+    //    ESP_LOGI(TAGb, "brclt->motor_count: %d ",  brclt->motor_count);
+
+    //    ESP_LOGI(TAGb, "bracelet.motor_count: %d ",  bracelet.motor_count);
+
+    for (int idx = 0; idx < brclt->motor_count; idx++)
     {
-
-        /*   for (int intensity = 0; intensity <= 100; intensity += 20)
-                {
-
-                    motorIntensity(brclt->motor[current], intensity);
-                    vTaskDelay(pdMS_TO_TICKS(10)); // Delay for smooth ramp-up
-                }
-                motorIntensity(brclt->motor[current], 0);*/
-        ESP_LOGI(TAGb, "Initializing motor: %d", current);        
-        motorIntensity(brclt->motor[current], 40);
-        vTaskDelay(pdMS_TO_TICKS(20)); // Delay for smooth ramp-up
-        motorIntensity(brclt->motor[current], 0);
+        ESP_LOGI(TAGb, "Initializing motor idx: %d of %d", idx, brclt->motor_count);
+        motorIntensity(&(bracelet.motor[idx]), 40);
+        vTaskDelay(pdMS_TO_TICKS(pdMS_TO_TICKS(10))); // Delay for smooth ramp-up
+        motorIntensity(&(bracelet.motor[idx]), 0);
     }
 }
